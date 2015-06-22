@@ -2,13 +2,15 @@ require "sinatra/base"
 require 'force'
 require "omniauth"
 require "omniauth-salesforce"
-
+require "slim"
+require "pry"
 
 class MyApp < Sinatra::Base
 
   configure do
     enable :logging
     enable :sessions
+    set :port, ENV['PORT'] unless ENV['PORT'].nil?
     set :show_exceptions, false
     set :session_secret, ENV['SECRET']
   end
@@ -17,16 +19,15 @@ class MyApp < Sinatra::Base
     provider :salesforce, ENV['SALESFORCE_KEY'], ENV['SALESFORCE_SECRET']
   end
 
-  before /^(?!\/(auth.*))/ do   
+  before /^(?!\/(auth.*)?)$/ do
     redirect '/authenticate' unless session[:instance_url]
   end
 
-
   helpers do
     def client
-      @client ||= Force.new instance_url:  session['instance_url'], 
-                            oauth_token:   session['token'],
-                            refresh_token: session['refresh_token'],
+      @client ||= Force.new username: ENV['SALESFORCE_USERNAME'],
+                            password: ENV['SALESFORCE_PASSWORD'],
+                            security_token: ENV['SALESFORCE_SECURITY_TOKEN'],
                             client_id:     ENV['SALESFORCE_KEY'],
                             client_secret: ENV['SALESFORCE_SECRET']
     end
@@ -35,9 +36,19 @@ class MyApp < Sinatra::Base
 
 
   get '/' do
+    slim :index
+  end
+
+  get '/forceme' do
     logger.info "Visited home page"
-    @accounts= client.query("select Id, Name from Account")    
-    erb :index
+    @accounts= client.query("select Id, Name from Account")
+    erb :forceme
+  end
+
+  get '/orders' do
+    @description = client.describe('Order')
+    @orders = client.query("SELECT Id, Name, AccountId FROM Order")
+    slim :orders
   end
 
 
@@ -60,7 +71,7 @@ class MyApp < Sinatra::Base
   end
 
   get '/unauthenticate' do
-    session.clear 
+    session.clear
     'Goodbye - you are now logged out'
   end
 
